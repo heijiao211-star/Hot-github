@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 GITHUB_BASE_URL = "https://github.com"
 PUSHPLUS_URL = os.getenv("PUSHPLUS_URL", "https://www.pushplus.plus/send")
+PUSHPLUS_SAFE_LIMIT = int(os.getenv("PUSHPLUS_SAFE_LIMIT", "18000"))
 PERIODS = [
     ("daily", "日榜", "最近一天突然变热的项目，适合看新鲜方向和新工具"),
     ("weekly", "周榜", "最近一周持续有人关注的项目，热度比日榜更稳定"),
@@ -437,7 +438,66 @@ def build_report(sections: list[tuple[str, str, list[RepoItem]]]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def send_pushplus(title: str, content: str) -> None:
+def split_long_text(text: str, limit: int) -> list[str]:
+    if len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+    for block in re.split(r"\n(?=#### No\.\d{2}\s+|\## )", text):
+        block = block.strip()
+        if not block:
+            continue
+        candidate = f"{current}\n\n{block}".strip() if current else block
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+            current = ""
+        if len(block) <= limit:
+            current = block
+            continue
+        paragraphs = block.split("\n\n")
+        for paragraph in paragraphs:
+            candidate = f"{current}\n\n{paragraph}".strip() if current else paragraph
+            if len(candidate) <= limit:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                current = paragraph[:limit]
+                rest = paragraph[limit:]
+                while rest:
+                    chunks.append(current)
+                    current = rest[:limit]
+                    rest = rest[limit:]
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def build_pushplus_parts(content: str, limit: int = PUSHPLUS_SAFE_LIMIT) -> list[str]:
+    if len(content) <= limit:
+        return [content]
+
+    parts: list[str] = []
+    section_pattern = re.compile(r"(?m)^## (日榜|周榜|月榜) Top 10$")
+    matches = list(section_pattern.finditer(content))
+    if not matches:
+        return split_long_text(content, limit)
+
+    overview = content[: matches[0].start()].strip()
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
+        section = content[match.start() : end].strip()
+        if index == 0 and overview:
+            section = f"{overview}\n\n{section}"
+        parts.extend(split_long_text(section, limit))
+    return parts
+
+
+def send_pushplus_once(title: str, content: str) -> None:
     token = os.getenv("PUSHPLUS_TOKEN", "").strip()
     if not token:
         raise RuntimeError("缺少 PUSHPLUS_TOKEN。请在 GitHub 仓库 Settings -> Secrets and variables -> Actions 里添加。")
@@ -452,6 +512,13 @@ def send_pushplus(title: str, content: str) -> None:
         data = {}
     if data.get("code") not in (None, 200):
         raise RuntimeError(f"pushplus 返回异常：{data}")
+
+
+def send_pushplus(title: str, content: str) -> None:
+    parts = build_pushplus_parts(content)
+    for index, part in enumerate(parts, start=1):
+        part_title = title if len(parts) == 1 else f"{title}（{index}/{len(parts)}）"
+        send_pushplus_once(part_title, part)
 
 
 def parse_args() -> argparse.Namespace:
