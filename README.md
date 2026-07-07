@@ -1,31 +1,30 @@
 # Hot GitHub
 
-每天北京时间 09:00 自动抓取 GitHub Trending 的日榜、周榜、月榜 Top 10，并把每个项目整理成更清晰的中文精读简报后推送到 pushplus。
+每天北京时间 09:00 自动抓取 GitHub Trending 的日榜、周榜、月榜 Top 10，为每个项目生成中文一句话精读，并以暗色高级 HTML 卡片的形式推送到 pushplus。
 
 ## 它会推送什么
 
 - 日榜 Top 10：最近一天突然变热的项目。
 - 周榜 Top 10：最近一周持续受关注的项目。
 - 月榜 Top 10：最近一个月很多人收藏的项目。
-- 每个项目都会包含项目名、GitHub 跳转链接、定位、作者简介、语言、收藏数、热度指数，以及更完整的“解释”。
-- 推送内容会先给总览和速览表，再展开每个项目的信息卡，阅读起来更清楚。
-- 如果完整日报超过 pushplus 单条限制，会自动拆成多条推送，标题里会标明第几部分。
+- 每个项目包含排名、项目名、语言、总星数、本期新增星数和中文精读。
+- 整合成暗色高级 HTML 页面，微信里点开即可阅读。
+- 优先使用 AI 生成中文摘要；AI 不可用时自动回退到类目规则模板。
 
 ## 第一次使用
 
 1. 打开仓库的 `Settings`。
 2. 进入 `Secrets and variables` -> `Actions`。
-3. 新增一个 Repository secret：
-   - Name：`PUSHPLUS_TOKEN`
-   - Secret：你的 pushplus token
-4. 进入 `Actions` 页面，打开 `Daily GitHub Trending PushPlus`。
-5. 可以点 `Run workflow` 手动试跑一次；之后会每天北京时间 09:00 自动推送。
+3. 新增以下 Repository secrets：
+   - `PUSHPLUS_TOKEN`：你的 pushplus token
+4. 进入 `Actions` 页面，点击 `Daily GitHub Trending PushPlus`。
+5. 点 `Run workflow` 手动试跑一次；之后会每天北京时间 09:00 自动推送。
 
-## 可选：让解释更像真人
+## 可选：让 AI 生成更灵活的中文精读
 
-默认版本不需要任何 AI Key，完全靠规则生成通俗解释，优点是免费、稳定、不会泄露 token。解释会尽量说明它是什么、能在工作中解决什么问题，以及在生活或学习里可以怎么理解。
+默认版本不需要 AI Key，完全靠类目规则模板生成纯中文介绍，优点是免费、稳定、不会泄露 token。
 
-如果你以后想让解释更灵活，可以额外添加这些 Secrets：
+如果想让每条精读更加灵活自然，可以额外添加以下 Secrets：
 
 - `AI_API_KEY`：OpenAI 兼容接口的 API Key。
 - `AI_BASE_URL`：接口地址，不填时默认 `https://api.openai.com/v1`。
