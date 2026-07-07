@@ -121,17 +121,21 @@ def ai_summarize(repos: list[RepoItem]) -> dict[str, str]:
                         {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload_repos, ensure_ascii=False)}"},
                     ],
                     "temperature": 0.4,
-                    "max_tokens": 3000,
+                    "max_tokens": 4000,
                 },
                 timeout=180,
             )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
+            print(f"[DEBUG] batch {i//batch_size + 1} raw length={len(content)}, preview={content[:200]}")
             content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.S)
             parsed = json.loads(content)
+            batch_count = 0
             for k, v in parsed.items():
                 if isinstance(v, str) and v.strip():
                     summaries[str(k)] = v.strip()
+                    batch_count += 1
+            print(f"[DEBUG] batch {i//batch_size + 1} parsed {batch_count} summaries")
         except Exception as exc:
             print(f"[WARN] AI 批次 {i//batch_size + 1} 生成失败：{exc}", file=sys.stderr)
 
