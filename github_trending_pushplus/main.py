@@ -270,6 +270,8 @@ def main() -> int:
     print(f"[INFO] generated {len(summaries)} AI summaries")
 
     html = build_html(sections, summaries)
+    fallback_count = sum(1 for _, _, repos in sections for repo in repos if repo.full_name not in summaries)
+    print(f"[INFO] generated {len(summaries)} unique AI summaries, {fallback_count} repos using fallback")
     with open(args.output, "w", encoding="utf-8") as file:
         file.write(html)
 
