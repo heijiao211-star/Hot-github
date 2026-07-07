@@ -93,40 +93,49 @@ def ai_summarize(repos: list[RepoItem]) -> dict[str, str]:
         print("[WARN] AI_API_KEY / AI_MODEL 未配置，跳过 AI 摘要", file=sys.stderr)
         return {}
 
-    payload_repos = [
-        {"name": repo.full_name, "description": repo.description, "language": repo.language}
-        for repo in repos
-    ]
     prompt = (
-        "你是中国小白用户的 GitHub 技术博主，请把下面项目转成地道中文介绍。"
+        "你是中国小白用户的 GitHub 技术博主，请把下面每个项目转成地道中文介绍。"
         "严格要求：1.纯中文，不出现英文句子；2.每个项目 2-3 句话，40-60 个汉字；"
         "3.第一句说它是干什么的，第二句说适合谁或解决什么问题；"
         "4.自然多样，不要每句以‘就像’开头；"
         "5.输出严格 JSON，键是项目全名，值是中文介绍。"
     )
-    try:
-        response = requests.post(
-            f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": "你是中文开源项目介绍助手，只输出纯中文 JSON。"},
-                    {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload_repos, ensure_ascii=False)}"},
-                ],
-                "temperature": 0.4,
-                "max_tokens": 5000,
-            },
-            timeout=180,
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.S)
-        parsed = json.loads(content)
-        return {str(k): str(v).strip() for k, v in parsed.items() if isinstance(v, str) and v.strip()}
-    except Exception as exc:
-        print(f"[WARN] AI 摘要生成失败：{exc}", file=sys.stderr)
-        return {}
+
+    summaries: dict[str, str] = {}
+    # 分批生成，每批 10 个，避免模型输出不完整
+    batch_size = 10
+    for i in range(0, len(repos), batch_size):
+        batch = repos[i:i + batch_size]
+        payload_repos = [
+            {"name": repo.full_name, "description": repo.description, "language": repo.language}
+            for repo in batch
+        ]
+        try:
+            response = requests.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "你是中文开源项目介绍助手，只输出纯中文 JSON。"},
+                        {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload_repos, ensure_ascii=False)}"},
+                    ],
+                    "temperature": 0.4,
+                    "max_tokens": 3000,
+                },
+                timeout=180,
+            )
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.S)
+            parsed = json.loads(content)
+            for k, v in parsed.items():
+                if isinstance(v, str) and v.strip():
+                    summaries[str(k)] = v.strip()
+        except Exception as exc:
+            print(f"[WARN] AI 批次 {i//batch_size + 1} 生成失败：{exc}", file=sys.stderr)
+
+    return summaries
 
 
 def fallback_summary(repo: RepoItem) -> str:
