@@ -18,10 +18,6 @@ PERIODS = [
     ("weekly", "周榜", "最近一周持续受关注的项目，热度更稳定"),
     ("monthly", "月榜", "最近一个月很多人收藏的项目，值得慢慢研究"),
 ]
-STOP_WORDS = {
-    "the", "and", "for", "with", "from", "that", "this", "your", "open", "source",
-    "simple", "fast", "free", "build", "using", "based", "awesome",
-}
 
 
 @dataclass(frozen=True)
@@ -32,130 +28,6 @@ class RepoItem:
     language: str
     stars: str
     period_stars: str
-
-
-@dataclass(frozen=True)
-class Category:
-    pattern: str
-    name: str
-    analogy: str
-    core_value: str
-    work_value: str
-    life_value: str
-    suitable_for: str
-
-
-CATEGORIES = [
-    Category(
-        r"\b(ai|llm|agent|rag|prompt|chatgpt|gpt|copilot|model)\b",
-        "AI 助手 / 智能工具",
-        "一个会读材料、写内容、帮你整理想法的智能助手",
-        "把原本需要人慢慢阅读、总结、编写或判断的事情，交给程序自动做一部分",
-        "在工作里可以用来写文档、整理资料、做客服问答、辅助写代码、自动处理重复流程",
-        "在学习和生活里可以用来解释难懂内容、整理笔记、做计划，或者把复杂信息翻成好懂的话",
-        "适合关注 AI、自动化办公、知识整理、代码助手的人",
-    ),
-    Category(
-        r"\b(machine learning|deep learning|neural|transformer|diffusion|training|inference)\b",
-        "机器学习 / 模型工具",
-        "一个教电脑从例子里学本事的训练场",
-        "帮助电脑从大量样本里学规律，然后用这些规律去识别、预测、生成或推荐",
-        "在工作里常用于智能识别、数据预测、图片/文字生成、推荐系统和模型部署",
-        "在生活里更像把很多经验整理成一个会判断的小帮手，比如识别图片、翻译文字、推荐内容",
-        "适合想了解 AI 底层模型、训练、推理和算法应用的人",
-    ),
-    Category(
-        r"\b(frontend|react|vue|svelte|next\.?js|css|tailwind|component|ui|website|web app)\b",
-        "网页界面 / 前端工具",
-        "一套做网页和界面的积木",
-        "让程序员更快做出好看、清晰、能点击操作的网页或后台页面",
-        "在工作里可以用来搭建官网、管理后台、数据看板、表单系统和各种在线工具",
-        "在生活里可以理解成做一个能在浏览器打开的小应用，比如记账、清单、作品集或个人网站",
-        "适合做网站、后台系统、可视化页面或产品原型的人",
-    ),
-    Category(
-        r"\b(api|backend|server|database|postgres|mysql|sqlite|redis|sql|orm|cache)\b",
-        "后台服务 / 数据工具",
-        "一个在网站背后值班的仓库管理员",
-        "负责接收请求、保存资料、查询数据、处理规则，让前台页面真正能工作",
-        "在工作里可以用来做用户系统、订单系统、资料库、接口服务、数据同步和权限管理",
-        "在生活里可以理解成一个不会睡觉的记事员，帮应用记住你的信息并在需要时找出来",
-        "适合关心网站背后怎么存数据、跑服务、连系统的人",
-    ),
-    Category(
-        r"\b(cli|command line|terminal|shell|powershell|bash|console)\b",
-        "命令行 / 效率工具",
-        "一个听口令办事的快捷助手",
-        "把原来要点很多按钮的操作，变成一行命令或一套自动步骤",
-        "在工作里可以用来批量处理文件、自动发布项目、检查代码、生成报表或管理服务器",
-        "在生活里可以理解成批处理小秘书，比如一口气改很多文件名、整理下载内容、自动备份资料",
-        "适合喜欢提高效率、减少重复点击、经常处理文件或代码的人",
-    ),
-    Category(
-        r"\b(security|auth|password|encrypt|scan|vulnerability|malware|firewall|token)\b",
-        "安全 / 账号保护工具",
-        "一套门锁、监控和巡检工具",
-        "帮助发现风险、保护账号密码、加密资料，减少系统被攻击或资料泄露的可能",
-        "在工作里可以用来做登录认证、权限控制、漏洞扫描、密钥管理和安全审计",
-        "在生活里可以理解成帮你看门的安全工具，提醒哪些地方可能不安全",
-        "适合关心账号安全、系统安全、代码安全和合规检查的人",
-    ),
-    Category(
-        r"\b(docker|kubernetes|deploy|deployment|cloud|infra|devops|ci/cd|terraform|helm)\b",
-        "部署 / 运维工具",
-        "一辆搬家公司卡车加一个值班员",
-        "把程序从开发电脑搬到服务器或云平台，并尽量让它稳定运行、方便更新",
-        "在工作里可以用来自动发布、环境搭建、服务监控、扩容缩容和基础设施管理",
-        "在生活里可以理解成让一个小网站或工具不用一直开着自己电脑，也能放到云上运行",
-        "适合做上线发布、云服务、服务器维护和自动化流程的人",
-    ),
-    Category(
-        r"\b(game|engine|graphics|render|3d|shader|canvas|webgl|animation)\b",
-        "图形 / 游戏 / 渲染工具",
-        "一套画画、做动画和搭场景的工具箱",
-        "帮助生成画面、动画、3D 场景或游戏效果，让视觉内容更容易做出来",
-        "在工作里可以用于游戏开发、可视化展示、设计工具、互动页面和图像处理",
-        "在生活里可以理解成做小动画、小游戏、3D 展示或视觉特效的材料包",
-        "适合关注游戏、动画、3D、图像效果和交互体验的人",
-    ),
-    Category(
-        r"\b(android|ios|mobile|desktop|electron|app|windows|macos|linux)\b",
-        "应用开发工具",
-        "一套做手机或电脑软件的模具",
-        "帮助开发者更快做出能安装、能打开、能长期维护的软件",
-        "在工作里可以用来开发手机 App、桌面软件、跨平台工具或企业内部应用",
-        "在生活里可以理解成把一个想法做成真正能点开使用的小软件",
-        "适合想做 App、桌面工具、跨平台应用和个人软件的人",
-    ),
-    Category(
-        r"\b(crawler|scraper|search|index|dataset|data|analytics|visualization|chart)\b",
-        "数据采集 / 分析工具",
-        "一个会收集、整理和找资料的资料柜",
-        "把散落的信息抓回来、清洗好、存起来，再用搜索、图表或分析方式看清楚",
-        "在工作里可以用于报表、市场监控、舆情分析、搜索系统、数据看板和自动统计",
-        "在生活里可以理解成自动帮你搜集资料、整理清单、做对比和看趋势",
-        "适合经常处理表格、网页资料、搜索结果和数据分析的人",
-    ),
-    Category(
-        r"\b(awesome|guide|book|tutorial|course|learn|examples|roadmap|interview)\b",
-        "学习资料 / 知识清单",
-        "一张整理好的学习地图",
-        "把一个领域的教程、例子、路线或资料集中放好，让新手不用到处乱找",
-        "在工作里可以用来快速补课、培训新人、查找实践案例或准备面试",
-        "在生活里可以理解成一份已经筛过的书单和路线图，跟着看更容易入门",
-        "适合想快速了解新技术、找资料、系统学习的人",
-    ),
-]
-
-DEFAULT_CATEGORY = Category(
-    "",
-    "开源项目 / 工具作品",
-    "一个别人公开放出来的工具或作品",
-    "解决某类具体问题，或者给开发者提供可以直接参考、复用、改造的代码",
-    "在工作里可以作为现成方案、参考实现、效率工具或项目模板，帮人少走一些弯路",
-    "在生活或学习里可以当成一个观察窗口，看看别人是怎么把一个问题做成工具的",
-    "适合想看看最近大家在做什么、哪些方向变热的人",
-)
 
 
 def clean_text(value: str) -> str:
@@ -203,6 +75,7 @@ def parse_repo_article(article) -> RepoItem | None:
 
 
 def fetch_trending(session: requests.Session, period: str, limit: int) -> list[RepoItem]:
+    # GitHub 官方 Trending 页面，非官方 API，按网页结构解析
     response = session.get(f"{GITHUB_BASE_URL}/trending?since={period}", timeout=30)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
@@ -212,19 +85,12 @@ def fetch_trending(session: requests.Session, period: str, limit: int) -> list[R
     return items[:limit]
 
 
-def pick_category(repo: RepoItem) -> Category:
-    text = f"{repo.full_name} {repo.description} {repo.language}".lower()
-    for category in CATEGORIES:
-        if re.search(category.pattern, text):
-            return category
-    return DEFAULT_CATEGORY
-
-
 def ai_summarize(repos: list[RepoItem]) -> dict[str, str]:
     api_key = os.getenv("AI_API_KEY", "").strip()
     model = os.getenv("AI_MODEL", "").strip()
     base_url = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     if not api_key or not model:
+        print("[WARN] AI_API_KEY / AI_MODEL 未配置，跳过 AI 摘要", file=sys.stderr)
         return {}
 
     payload_repos = [
@@ -259,17 +125,13 @@ def ai_summarize(repos: list[RepoItem]) -> dict[str, str]:
         parsed = json.loads(content)
         return {str(k): str(v).strip() for k, v in parsed.items() if isinstance(v, str) and v.strip()}
     except Exception as exc:
-        print(f"[WARN] AI 摘要生成失败，改用规则解释：{exc}", file=sys.stderr)
+        print(f"[WARN] AI 摘要生成失败：{exc}", file=sys.stderr)
         return {}
 
 
-def rule_summary(repo: RepoItem) -> str:
-    category = pick_category(repo)
-    return (
-        f"它可以先理解成{category.analogy}。"
-        f"核心作用是{category.core_value}。"
-        f"{category.suitable_for}。"
-    )
+def fallback_summary(repo: RepoItem) -> str:
+    # AI 不可用时的极简回退，不出现英文原文
+    return "本月热门开源项目，点击名字可以跳转到 GitHub 查看详情。"
 
 
 def growth_number(text: str) -> str:
@@ -288,7 +150,7 @@ def build_html(sections: list[tuple[str, str, list[RepoItem]]], summaries: dict[
     for period_name, period_help, repos in sections:
         cards = []
         for idx, repo in enumerate(repos, 1):
-            summary = html_escape(summaries.get(repo.full_name) or rule_summary(repo))
+            summary = html_escape(summaries.get(repo.full_name) or fallback_summary(repo))
             growth = html_escape(growth_number(repo.period_stars))
             cards.append(f"""
   <div class="card">
