@@ -13,30 +13,14 @@ from bs4 import BeautifulSoup
 
 GITHUB_BASE_URL = "https://github.com"
 PUSHPLUS_URL = os.getenv("PUSHPLUS_URL", "https://www.pushplus.plus/send")
-PUSHPLUS_SAFE_LIMIT = int(os.getenv("PUSHPLUS_SAFE_LIMIT", "18000"))
 PERIODS = [
-    ("daily", "日榜", "最近一天突然变热的项目，适合看新鲜方向和新工具"),
-    ("weekly", "周榜", "最近一周持续有人关注的项目，热度比日榜更稳定"),
-    ("monthly", "月榜", "最近一个月很多人收藏的项目，通常更值得慢慢研究"),
+    ("daily", "日榜", "最近一天突然变热的项目，适合看新鲜方向"),
+    ("weekly", "周榜", "最近一周持续受关注的项目，热度更稳定"),
+    ("monthly", "月榜", "最近一个月很多人收藏的项目，值得慢慢研究"),
 ]
 STOP_WORDS = {
-    "the",
-    "and",
-    "for",
-    "with",
-    "from",
-    "that",
-    "this",
-    "your",
-    "open",
-    "source",
-    "simple",
-    "fast",
-    "free",
-    "build",
-    "using",
-    "based",
-    "awesome",
+    "the", "and", "for", "with", "from", "that", "this", "your", "open", "source",
+    "simple", "fast", "free", "build", "using", "based", "awesome",
 }
 
 
@@ -56,14 +40,6 @@ class Category:
     name: str
     analogy: str
     core_value: str
-    work_value: str
-    life_value: str
-    suitable_for: str
-
-
-@dataclass(frozen=True)
-class Explanation:
-    overview: str
     work_value: str
     life_value: str
     suitable_for: str
@@ -188,13 +164,11 @@ def clean_text(value: str) -> str:
 
 def get_session() -> requests.Session:
     session = requests.Session()
-    session.headers.update(
-        {
-            "User-Agent": "Hot-github/1.0 (+https://github.com/heijiao211-star/Hot-github)",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        }
-    )
+    session.headers.update({
+        "User-Agent": "Hot-github/2.0 (+https://github.com/heijiao211-star/Hot-github)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    })
     return session
 
 
@@ -246,56 +220,11 @@ def pick_category(repo: RepoItem) -> Category:
     return DEFAULT_CATEGORY
 
 
-def keywords(description: str) -> str:
-    found: list[str] = []
-    for word in re.findall(r"[A-Za-z][A-Za-z0-9.+#-]{2,}", description):
-        if word.lower() not in STOP_WORDS and word.lower() not in {item.lower() for item in found}:
-            found.append(word)
-        if len(found) >= 5:
-            break
-    return "、".join(found)
-
-
-def local_explain(repo: RepoItem) -> Explanation:
-    category = pick_category(repo)
-    kw = keywords(repo.description)
-    keyword_text = f"作者简介里出现的关键词有 {kw}，可以先把它理解成和这些方向有关的项目。" if kw else ""
-    overview = (
-        f"它可以先理解成{category.analogy}。从项目描述看，它更像是一个「{category.name}」，"
-        f"核心作用是{category.core_value}。{keyword_text}"
-    )
-    return Explanation(
-        overview=overview,
-        work_value=category.work_value,
-        life_value=category.life_value,
-        suitable_for=category.suitable_for,
-    )
-
-
-def strip_json_fence(text: str) -> str:
-    match = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text.strip(), flags=re.S)
-    return match.group(1).strip() if match else text.strip()
-
-
-def coerce_explanation(value: object) -> Explanation | None:
-    if isinstance(value, str) and value.strip():
-        return Explanation(value.strip(), "", "", "")
-    if not isinstance(value, dict):
-        return None
-    overview = clean_text(str(value.get("overview", "")))
-    work_value = clean_text(str(value.get("work_value", "")))
-    life_value = clean_text(str(value.get("life_value", "")))
-    suitable_for = clean_text(str(value.get("suitable_for", "")))
-    if not any([overview, work_value, life_value, suitable_for]):
-        return None
-    return Explanation(overview, work_value, life_value, suitable_for)
-
-
-def ai_explain(repos: list[RepoItem]) -> dict[str, Explanation]:
+def ai_summarize(repos: list[RepoItem]) -> dict[str, str]:
     api_key = os.getenv("AI_API_KEY", "").strip()
     model = os.getenv("AI_MODEL", "").strip()
     base_url = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    if not api_key or not model or os.getenv("FORCE_RULE_BASED", "").lower() in {"1", "true", "yes"}:
+    if not api_key or not model:
         return {}
 
     payload_repos = [
@@ -303,205 +232,136 @@ def ai_explain(repos: list[RepoItem]) -> dict[str, Explanation]:
         for repo in repos
     ]
     prompt = (
-        "请把这些 GitHub 项目解释成中文，读者是不懂技术但愿意了解工具价值的人。"
-        "不要堆术语，不要只写一句空话。每个项目输出 JSON 对象，key 是 name，value 是对象："
-        "overview 用 80 到 120 个中文字符说明它是什么和核心作用；"
-        "work_value 用 50 到 90 个中文字符说明它在工作中能解决什么问题；"
-        "life_value 用 40 到 80 个中文字符说明它在生活或学习中可以怎么理解；"
-        "suitable_for 用 25 到 50 个中文字符说明适合谁关注。只输出严格 JSON。"
+        "你是中国小白用户的 GitHub 技术博主，请把下面项目转成地道中文介绍。"
+        "严格要求：1.纯中文，不出现英文句子；2.每个项目 2-3 句话，40-60 个汉字；"
+        "3.第一句说它是干什么的，第二句说适合谁或解决什么问题；"
+        "4.自然多样，不要每句以‘就像’开头；"
+        "5.输出严格 JSON，键是项目全名，值是中文介绍。"
     )
-    response = requests.post(
-        f"{base_url}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "你擅长把技术项目讲成清楚、具体、好读的中文简报。"},
-                {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload_repos, ensure_ascii=False)}"},
-            ],
-            "temperature": 0.35,
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
-    parsed = json.loads(strip_json_fence(content))
-    result: dict[str, Explanation] = {}
-    for name, value in parsed.items():
-        explanation = coerce_explanation(value)
-        if explanation:
-            result[str(name)] = explanation
-    return result
-
-
-def extract_count(value: str) -> int:
-    match = re.search(r"([\d,]+)", value or "")
-    if not match:
-        return 0
-    return int(match.group(1).replace(",", ""))
-
-
-def heat_index(repo: RepoItem, repos: list[RepoItem]) -> str:
-    counts = [extract_count(item.period_stars) for item in repos]
-    max_count = max(counts or [0])
-    current = extract_count(repo.period_stars)
-    if not max_count or not current:
-        return "未显示"
-    score = max(1.0, round(current / max_count * 10, 1))
-    return f"{score:.1f} / 10"
-
-
-def category_name(repo: RepoItem) -> str:
-    return pick_category(repo).name
-
-
-def format_overview_table(sections: list[tuple[str, str, list[RepoItem]]]) -> list[str]:
-    lines = [
-        "## 今日总览",
-        "",
-        "| 榜单 | 观察重点 | 第一名 | 最高热度 |",
-        "|---|---|---|---|",
-    ]
-    for period_name, period_help, repos in sections:
-        top = repos[0]
-        lines.append(
-            f"| {period_name} | {period_help} | [{top.full_name}]({top.url}) | {top.period_stars} |"
-        )
-    return lines + [""]
-
-
-def format_rank_table(period_name: str, repos: list[RepoItem]) -> list[str]:
-    lines = [
-        f"### {period_name}速览",
-        "",
-        "| 排名 | 项目 | 定位 | 语言 | 热度指数 | 总收藏 |",
-        "|---:|---|---|---|---:|---:|",
-    ]
-    for index, repo in enumerate(repos, start=1):
-        lines.append(
-            f"| {index} | [{repo.full_name}]({repo.url}) | {category_name(repo)} | {repo.language} | {heat_index(repo, repos)} | {repo.stars} |"
-        )
-    return lines + [""]
-
-
-def format_repo_card(index: int, repo: RepoItem, repos: list[RepoItem], explanation: Explanation) -> list[str]:
-    lines = [
-        f"#### No.{index:02d}  [{repo.full_name}]({repo.url})",
-        "",
-        "| 信息位 | 内容 |",
-        "|---|---|",
-        f"| 项目定位 | {category_name(repo)} |",
-        f"| 主要语言 | {repo.language} |",
-        f"| 总收藏 | {repo.stars} |",
-        f"| 热度指数 | {heat_index(repo, repos)} |",
-        f"| 本榜新增 | {repo.period_stars} |",
-        "",
-        f"> **作者简介**：{repo.description}",
-        "",
-        f"**解释**：{explanation.overview}",
-    ]
-    if explanation.work_value:
-        lines.append(f"**工作里能解决什么**：{explanation.work_value}。")
-    if explanation.life_value:
-        lines.append(f"**生活/学习里怎么理解**：{explanation.life_value}。")
-    if explanation.suitable_for:
-        lines.append(f"**适合谁看**：{explanation.suitable_for}。")
-    lines += ["", "---", ""]
-    return lines
-
-
-def build_report(sections: list[tuple[str, str, list[RepoItem]]]) -> str:
-    all_repos = [repo for _, _, repos in sections for repo in repos]
     try:
-        explain_map = ai_explain(all_repos)
-    except Exception as exc:  # noqa: BLE001
-        print(f"AI 解释生成失败，自动改用免费规则解释：{exc}", file=sys.stderr)
-        explain_map = {}
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "你是中文开源项目介绍助手，只输出纯中文 JSON。"},
+                    {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload_repos, ensure_ascii=False)}"},
+                ],
+                "temperature": 0.4,
+                "max_tokens": 5000,
+            },
+            timeout=180,
+        )
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.S)
+        parsed = json.loads(content)
+        return {str(k): str(v).strip() for k, v in parsed.items() if isinstance(v, str) and v.strip()}
+    except Exception as exc:
+        print(f"[WARN] AI 摘要生成失败，改用规则解释：{exc}", file=sys.stderr)
+        return {}
 
-    now = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
-    lines = [
-        "# GitHub 热榜精读",
-        "",
-        f"> 生成时间：{now}（北京时间）",
-        "> 覆盖范围：日榜、周榜、月榜 Top 10",
-        "> 阅读方式：先看速览表，遇到感兴趣的项目再看详细解释，项目名可直接跳转 GitHub。",
-        "",
-    ]
-    lines += format_overview_table(sections)
 
+def rule_summary(repo: RepoItem) -> str:
+    category = pick_category(repo)
+    return (
+        f"它可以先理解成{category.analogy}。"
+        f"核心作用是{category.core_value}。"
+        f"{category.suitable_for}。"
+    )
+
+
+def growth_number(text: str) -> str:
+    m = re.search(r"([\d,]+)", text)
+    return f"+{m.group(1)}" if m else text
+
+
+def html_escape(text: str) -> str:
+    return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def build_html(sections: list[tuple[str, str, list[RepoItem]]], summaries: dict[str, str]) -> str:
+    now = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).strftime("%m-%d %H:%M")
+
+    section_htmls = []
     for period_name, period_help, repos in sections:
-        lines += [f"## {period_name} Top 10", "", f"> {period_help}。", ""]
-        lines += format_rank_table(period_name, repos)
-        for index, repo in enumerate(repos, start=1):
-            explanation = explain_map.get(repo.full_name) or local_explain(repo)
-            lines += format_repo_card(index, repo, repos, explanation)
-    return "\n".join(lines).strip() + "\n"
+        cards = []
+        for idx, repo in enumerate(repos, 1):
+            summary = html_escape(summaries.get(repo.full_name) or rule_summary(repo))
+            growth = html_escape(growth_number(repo.period_stars))
+            cards.append(f"""
+  <div class="card">
+    <div class="rank">{idx}</div>
+    <div class="content">
+      <a href="{repo.url}" class="repo-name">{html_escape(repo.full_name)}</a>
+      <div class="meta">
+        <span class="lang">{html_escape(repo.language)}</span>
+        <span class="stars">{html_escape(repo.stars)}</span>
+        <span class="growth">{growth}</span>
+      </div>
+      <p class="desc">{summary}</p>
+    </div>
+  </div>""")
+        section_htmls.append(f"""
+  <div class="section">
+    <div class="section-title">{period_name}</div>
+    <div class="section-subtitle">{period_help}</div>
+    {''.join(cards)}
+  </div>""")
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{{margin:0;padding:0;background:#0c0c0e;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}}
+  .wrap{{max-width:720px;margin:0 auto;padding:48px 24px;}}
+  .hero{{position:relative;background:linear-gradient(160deg,#18181c 0%,#111114 60%,#0d0d0f 100%);border:1px solid rgba(255,255,255,0.06);border-radius:32px;padding:42px 36px;margin-bottom:32px;overflow:hidden;}}
+  .hero::before{{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);}}
+  .kicker{{font-size:11px;font-weight:700;letter-spacing:0.22em;color:#6b7280;text-transform:uppercase;margin-bottom:16px;}}
+  .hero h1{{margin:0;font-size:42px;font-weight:800;color:#fafafa;letter-spacing:-0.04em;line-height:1.05;}}
+  .hero p{{margin:14px 0 0 0;font-size:16px;color:#9ca3af;font-weight:500;max-width:520px;}}
+  .section{{margin-bottom:42px;}}
+  .section-title{{font-size:24px;font-weight:800;color:#fafafa;margin-bottom:6px;letter-spacing:-0.02em;}}
+  .section-subtitle{{font-size:14px;color:#6b7280;margin-bottom:20px;}}
+  .card{{position:relative;background:#141417;border:1px solid rgba(255,255,255,0.05);border-radius:24px;padding:24px;margin-bottom:14px;display:flex;gap:18px;align-items:flex-start;}}
+  .card::after{{content:'';position:absolute;top:0;left:24px;right:24px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);}}
+  .rank{{font-size:34px;font-weight:800;color:#10b981;line-height:1;min-width:42px;text-align:left;letter-spacing:-0.05em;}}
+  .content{{flex:1;min-width:0;}}
+  .repo-name{{font-size:17px;font-weight:700;color:#f3f4f6;margin-bottom:8px;text-decoration:none;display:block;letter-spacing:-0.01em;}}
+  .meta{{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}}
+  .lang{{font-size:12px;font-weight:600;color:#d1d5db;background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:100px;}}
+  .stars{{font-size:12px;font-weight:600;color:#6b7280;}}
+  .growth{{font-size:12px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.08);padding:4px 10px;border-radius:100px;border:1px solid rgba(16,185,129,0.14);}}
+  .desc{{margin:0;font-size:14px;color:#d1d5db;line-height:1.75;}}
+  .footer{{text-align:center;padding:24px 0 0 0;}}
+  .footer a{{color:#52525b;font-size:13px;text-decoration:none;font-weight:500;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="kicker">GitHub Trending</div>
+    <h1>GitHub 热榜精读</h1>
+    <p>日榜 · 周榜 · 月榜 Top 10，每个项目一句中文精读。生成时间：{now} 北京时间</p>
+  </div>
+  {''.join(section_htmls)}
+  <div class="footer">
+    <a href="https://github.com/heijiao211-star/Hot-github">来源：heijiao211-star/Hot-github</a>
+  </div>
+</div>
+</body>
+</html>"""
 
 
-def split_long_text(text: str, limit: int) -> list[str]:
-    if len(text) <= limit:
-        return [text]
-
-    chunks: list[str] = []
-    current = ""
-    for block in re.split(r"\n(?=#### No\.\d{2}\s+|\## )", text):
-        block = block.strip()
-        if not block:
-            continue
-        candidate = f"{current}\n\n{block}".strip() if current else block
-        if len(candidate) <= limit:
-            current = candidate
-            continue
-        if current:
-            chunks.append(current)
-            current = ""
-        if len(block) <= limit:
-            current = block
-            continue
-        paragraphs = block.split("\n\n")
-        for paragraph in paragraphs:
-            candidate = f"{current}\n\n{paragraph}".strip() if current else paragraph
-            if len(candidate) <= limit:
-                current = candidate
-            else:
-                if current:
-                    chunks.append(current)
-                current = paragraph[:limit]
-                rest = paragraph[limit:]
-                while rest:
-                    chunks.append(current)
-                    current = rest[:limit]
-                    rest = rest[limit:]
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def build_pushplus_parts(content: str, limit: int = PUSHPLUS_SAFE_LIMIT) -> list[str]:
-    if len(content) <= limit:
-        return [content]
-
-    parts: list[str] = []
-    section_pattern = re.compile(r"(?m)^## (日榜|周榜|月榜) Top 10$")
-    matches = list(section_pattern.finditer(content))
-    if not matches:
-        return split_long_text(content, limit)
-
-    overview = content[: matches[0].start()].strip()
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
-        section = content[match.start() : end].strip()
-        if index == 0 and overview:
-            section = f"{overview}\n\n{section}"
-        parts.extend(split_long_text(section, limit))
-    return parts
-
-
-def send_pushplus_once(title: str, content: str) -> None:
+def send_pushplus(title: str, content: str) -> None:
     token = os.getenv("PUSHPLUS_TOKEN", "").strip()
     if not token:
         raise RuntimeError("缺少 PUSHPLUS_TOKEN。请在 GitHub 仓库 Settings -> Secrets and variables -> Actions 里添加。")
-    payload = {"token": token, "title": title, "content": content, "template": "markdown"}
+    payload = {"token": token, "title": title, "content": content, "template": "html"}
     if topic := os.getenv("PUSHPLUS_TOPIC", "").strip():
         payload["topic"] = topic
     response = requests.post(PUSHPLUS_URL, json=payload, timeout=30)
@@ -510,22 +370,16 @@ def send_pushplus_once(title: str, content: str) -> None:
         data = response.json()
     except ValueError:
         data = {}
+    print(f"[INFO] pushplus response: {data}")
     if data.get("code") not in (None, 200):
         raise RuntimeError(f"pushplus 返回异常：{data}")
-
-
-def send_pushplus(title: str, content: str) -> None:
-    parts = build_pushplus_parts(content)
-    for index, part in enumerate(parts, start=1):
-        part_title = title if len(parts) == 1 else f"{title}（{index}/{len(parts)}）"
-        send_pushplus_once(part_title, part)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Push a polished GitHub Trending report to pushplus.")
     parser.add_argument("--limit", type=int, default=10, help="每个榜单抓取多少个项目，默认 10。")
     parser.add_argument("--dry-run", action="store_true", help="只生成报告，不发送 pushplus。")
-    parser.add_argument("--output", default="latest_report.md", help="报告保存路径，默认 latest_report.md。")
+    parser.add_argument("--output", default="latest_report.html", help="报告保存路径，默认 latest_report.html。")
     return parser.parse_args()
 
 
@@ -533,15 +387,24 @@ def main() -> int:
     args = parse_args()
     session = get_session()
     sections = [(name, help_text, fetch_trending(session, period, args.limit)) for period, name, help_text in PERIODS]
-    report = build_report(sections)
+
+    all_repos = [repo for _, _, repos in sections for repo in repos]
+    print(f"[INFO] fetched {len(all_repos)} repos from {len(PERIODS)} periods")
+
+    summaries = ai_summarize(all_repos)
+    print(f"[INFO] generated {len(summaries)} AI summaries")
+
+    html = build_html(sections, summaries)
     with open(args.output, "w", encoding="utf-8") as file:
-        file.write(report)
+        file.write(html)
+
     title = f"GitHub 热榜精读 {dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).strftime('%m-%d')}"
     if args.dry_run:
-        print(report)
+        print(html[:600])
         print(f"\n已生成报告：{args.output}")
         return 0
-    send_pushplus(title, report)
+
+    send_pushplus(title, html)
     print(f"已推送到 pushplus，并保存报告：{args.output}")
     return 0
 
